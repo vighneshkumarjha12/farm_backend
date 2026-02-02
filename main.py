@@ -23,5 +23,5 @@ app.include_router(TaskRoute)
 @app.get("/")
 def indexView():
     return{
-        "mag"  : "hi vighnesh"
+        "msg"  : "hi vighnesh"
     }
