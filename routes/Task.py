@@ -1,26 +1,13 @@
-from fastapi import APIRouter, HTTPException
-from models.Task import Task as TaskModel
+from fastapi import APIRouter, HTTPException, Depends
+from models.Task import Task as TaskModel, TaskUpdate
 from config.db import db
 from bson import ObjectId
 from bson.errors import InvalidId
-from models.Task import Task, TaskUpdate
+from utils.dependencies import get_current_user
 
 route = APIRouter(prefix="/api/v1", tags=["Task"])
 
 taskCollection = db["task"]
-
-# ---------------- CREATE ----------------
-@route.post("/create")
-async def addTask(data: TaskModel):
-    task_dict = data.dict()
-    result = await taskCollection.insert_one(task_dict)
-
-    task_dict["_id"] = str(result.inserted_id)
-
-    return {
-        "message": "Task created successfully",
-        "data": task_dict
-    }
 
 
 # ---------------- TRANSFORM ----------------
@@ -34,10 +21,35 @@ def transformTask(task) -> dict:
     }
 
 
+# ---------------- CREATE ----------------
+@route.post("/create")
+async def addTask(
+    data: TaskModel,
+    current_user: dict = Depends(get_current_user)
+):
+    task_dict = data.dict()
+
+    # attach logged-in user
+    task_dict["user_id"] = str(current_user["_id"])
+
+    result = await taskCollection.insert_one(task_dict)
+
+    task_dict["_id"] = str(result.inserted_id)
+
+    return {
+        "message": "Task created successfully",
+        "data": task_dict
+    }
+
+
 # ---------------- READ ----------------
 @route.get("/get")
-async def getAllTask():
-    docs = taskCollection.find({})
+async def getAllTask(current_user: dict = Depends(get_current_user)):
+
+    docs = taskCollection.find({
+        "user_id": str(current_user["_id"])
+    })
+
     tasks = []
 
     async for task in docs:
@@ -46,11 +58,24 @@ async def getAllTask():
     return tasks
 
 
-# ---------------- UPDATE (PUT) ----------------
+# ---------------- UPDATE ----------------
 @route.put("/update/{id}")
-async def updateTask(id: str, data: TaskModel):
+async def updateTask(
+    id: str,
+    data: TaskModel,
+    current_user: dict = Depends(get_current_user)
+):
+
+    try:
+        object_id = ObjectId(id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid task ID")
+
     result = await taskCollection.update_one(
-        {"_id": ObjectId(id)},
+        {
+            "_id": object_id,
+            "user_id": str(current_user["_id"])
+        },
         {"$set": data.dict()}
     )
 
@@ -60,9 +85,14 @@ async def updateTask(id: str, data: TaskModel):
     return {"message": "Task updated successfully"}
 
 
-# ---------------- PARTIAL UPDATE (PATCH) ----------------
+# ---------------- PATCH ----------------
 @route.patch("/patch/{id}")
-async def patchTask(id: str, data: TaskUpdate):
+async def patchTask(
+    id: str,
+    data: TaskUpdate,
+    current_user: dict = Depends(get_current_user)
+):
+
     try:
         object_id = ObjectId(id)
     except InvalidId:
@@ -74,7 +104,10 @@ async def patchTask(id: str, data: TaskUpdate):
         raise HTTPException(status_code=400, detail="No fields provided")
 
     result = await taskCollection.update_one(
-        {"_id": object_id},
+        {
+            "_id": object_id,
+            "user_id": str(current_user["_id"])
+        },
         {"$set": update_data}
     )
 
@@ -83,11 +116,24 @@ async def patchTask(id: str, data: TaskUpdate):
 
     return {"message": "Task updated successfully"}
 
+
 # ---------------- DELETE ----------------
 @route.delete("/delete/{id}")
-async def deleteTask(id: str):
+async def deleteTask(
+    id: str,
+    current_user: dict = Depends(get_current_user)
+):
+
+    try:
+        object_id = ObjectId(id)
+    except InvalidId:
+        raise HTTPException(status_code=400, detail="Invalid task ID")
+
     result = await taskCollection.delete_one(
-        {"_id": ObjectId(id)}
+        {
+            "_id": object_id,
+            "user_id": str(current_user["_id"])
+        }
     )
 
     if result.deleted_count == 0:

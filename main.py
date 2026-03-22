@@ -1,27 +1,30 @@
-from typing import Union
-
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+# routers
+from routes import auth
 from routes.Task import route as TaskRoute
 
-from fastapi.middleware.cors import CORSMiddleware
-app = FastAPI(title= "Task Manager")
+app = FastAPI(title="Task Manager")
 
-origins = [
-    "*"
-     
-]
-app.add_middleware(CORSMiddleware,
+# CORS
+origins = ["*"]
+
+app.add_middleware(
+    CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+# include routers
+app.include_router(auth.router)
 app.include_router(TaskRoute)
 
+# root route
 @app.get("/")
 def indexView():
-    return{
-        "msg"  : "hi vighnesh"
+    return {
+        "msg": "Hi Task Manager API is running 🚀"
     }
